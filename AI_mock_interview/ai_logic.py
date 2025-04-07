@@ -24,12 +24,16 @@ cursor = db.cursor()
 def generate_interview_questions(position, skills, experience):
     prompt = f"""
     Generate 5 technical interview questions for a {position} with expertise in {skills} 
-    and {experience} years of experience. Keep them relevant to the role.
+    and {experience} years of experience. Just return plain questions line by line without numbering or bullet points.
     """
     model = genai.GenerativeModel("gemini-1.5-pro-002")
     response = model.generate_content(prompt)
 
-    return response.text.split("\n") if response.text else [] 
+    if response.text:
+        lines = response.text.strip().split("\n")
+        questions = [line.strip("0123456789. ").strip() for line in lines if line.strip()]
+        return questions
+    return []
 
 # Process AI Feedback (Using Gemini)
 def generate_feedback(question, answer):

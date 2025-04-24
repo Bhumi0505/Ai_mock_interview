@@ -1,9 +1,14 @@
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
-from ai_logic import generate_interview_questions
+from ai_logic import generate_interview_questions,generate_feedback, store_answers_in_db,get_all_answered_questions
+import io
+
+
+
 
 # Page setup
 st.set_page_config(page_title="Smart Career Prep - AI Interview", layout="wide")
+
 
 # UI styling
 st.markdown("""
@@ -31,9 +36,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
 st.markdown("<h1 class='title'>AI Mock Interview</h1>", unsafe_allow_html=True)
 st.markdown("<h3 class='subheading'>Let's Get Started 🚀</h3>", unsafe_allow_html=True)
+user_id=st.session_state["user_id"]
+if "answered_indexes" not in st.session_state:
+    st.session_state.answered_indexes = []
 
+if "audio_data" not in st.session_state:
+    st.session_state.audio_data = {}
+
+if "recording" not in st.session_state:
+    st.session_state.recording = False
 # Session state setup
 position = st.session_state.get("position", "Not selected")
 if "description" not in st.session_state: st.session_state["description"] = ""
@@ -42,6 +56,7 @@ if "details_filled" not in st.session_state: st.session_state["details_filled"] 
 if "interview_started" not in st.session_state: st.session_state["interview_started"] = False
 if "question_index" not in st.session_state: st.session_state["question_index"] = 0
 if "questions_list" not in st.session_state: st.session_state["questions_list"] = []
+if "answers" not in st.session_state: st.session_state["answers"] = [] 
 
 # Job detail input
 if not st.session_state["details_filled"]:
@@ -78,9 +93,9 @@ with col1:
             st.markdown("""
                 <div style="background-color: #fff4d6; padding: 15px; border-radius: 8px; border-left: 5px solid #ffaa00;">
                     <p>⚡ <b>Information</b></p>
-                    <p>Enable Video Web Cam and Microphone to Start your AI Generated Mock Interview.</p>
+                    <p>Enable Video Web Cam  to Start your AI Generated Mock Interview.</p>
                     <p>It has 5 questions you can answer, and at the end, you will get a report based on your responses.</p>
-                    <p><b>NOTE:</b> We never record your video. Web cam access can be disabled anytime.</p>
+                    <p><b>NOTE:</b> We never record your video.</p>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -96,20 +111,25 @@ with col1:
                 <div style="background-color: #e6f0ff; padding: 15px 20px; border-radius: 10px; border-left: 5px solid #0066ff; margin-top: 20px;">
                     <p style="margin: 0; font-size: 16px;">
                         <span style="font-weight: 600; font-size: 17px;">💡 Note:</span><br>
-                        Click on <b>Record Answer</b> when you want to answer the question. At the end of interview we will give you the feedback along with correct answer for each of the question and your answer to compare it.
+                        Click on <b>Submit Answer</b> when you finish answering the question. At the end of interview we will give you the feedback along with correct answer for each of the question and your answer to compare it.
                     </p>
                 </div>
             """, unsafe_allow_html=True)
-
+             
             # Previous / Next with spacing
             st.markdown("<div style='margin-top: 20px'></div>", unsafe_allow_html=True)
             col_prev, col_next = st.columns(2)
+            
             with col_prev:
+                
+
                 if st.button("⬅️ Previous", disabled=q_index == 0):
                     st.session_state["question_index"] -= 1
+                    st.rerun()
             with col_next:
                 if st.button("Next ➡️", disabled=q_index == len(st.session_state["questions_list"]) - 1):
                     st.session_state["question_index"] += 1
+                    st.rerun()
 
 # Right: Webcam + Start / Record
 with col2:
@@ -118,6 +138,8 @@ with col2:
         class VideoProcessor(VideoProcessorBase):
             def recv(self, frame):
                 return frame
+          # Return the recorded audio as bytes
+
 
         webrtc_streamer(
             key="webcam",
@@ -144,4 +166,31 @@ with col2:
                 st.session_state["interview_started"] = True
                 st.rerun()
         else:
-            st.button("🎙️ Record Answer", use_container_width=True)
+            q_index=q_index = st.session_state["question_index"]
+            if q_index not in st.session_state.answered_indexes:
+                typed_answer = st.text_area("✍️ Type your answer below:", key=f"answer_input_{q_index}")
+                
+                if st.button("✅ Submit Answer"):
+                    if typed_answer.strip():
+                        store_answers_in_db(
+                            user_id,
+                            q_index,
+                            st.session_state["questions_list"][q_index],
+                            typed_answer.strip(),
+                            position
+                        )
+                        st.session_state.answered_indexes.append(q_index)
+                        st.rerun()
+                        
+                           
+                    else:
+                        st.warning("⚠️ Please type an answer before submitting.")
+            else:
+                st.info("✅ You've answered the question.")
+                if len(st.session_state.answered_indexes) == 5:
+                    st.markdown("<div style='margin-top: 20px'></div>", unsafe_allow_html=True)
+                    st.success("🎉 All questions answered!")
+                    if st.button("📊 View Feedback", use_container_width=True):
+                        questions_answers = get_all_answered_questions(user_id, position)
+                        generate_feedback(user_id, questions_answers, position)
+                        st.switch_page("pages/feedback.py")

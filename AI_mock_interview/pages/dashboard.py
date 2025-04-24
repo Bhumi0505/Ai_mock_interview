@@ -36,9 +36,9 @@ with col1:
         if validate_selection() !=1:
             st.switch_page("pages/interview.py")
 with col2:
-    if st.button("📄 View Interview Feedback", key="interview_feedback", help="View AI Interview Feedback", use_container_width=True):
+    if st.button("📊 View Interview Feedback", key="interview_feedback", help="View AI Interview Feedback", use_container_width=True):
         if validate_selection() !=1:
-            s=1
+            st.switch_page("pages/feedback.py")
 
 # Line separator before "Your Progress"
 st.markdown("""
